@@ -49,9 +49,10 @@ struct OverlaySettingsTests {
         #expect(!s.isEnabled(.quit))
     }
 
-    @Test("size defaults to 1; an older blob loads it that way")
+    @Test("always-show defaults off and size defaults to 1; an older blob loads them that way")
     func displayDefaults() throws {
         let s = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        #expect(!s.alwaysShow)
         #expect(s.buttonScale == 1)
     }
 

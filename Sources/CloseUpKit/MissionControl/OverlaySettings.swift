@@ -12,6 +12,8 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
     public var showClose: Bool
     public var showMinimize: Bool
     public var showZoom: Bool
+    /// Show the controls on every window at once, not only the hovered one.
+    public var alwaysShow: Bool
     /// Multiplier on the traffic-light size (1 = the native-matching default).
     public var buttonScale: Double
     /// Center a lone control on the window's top-left corner instead of inset
@@ -25,12 +27,14 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
         showClose: Bool = true,
         showMinimize: Bool = true,
         showZoom: Bool = true,
+        alwaysShow: Bool = false,
         buttonScale: Double = 1,
         singleControlAtCorner: Bool = false
     ) {
         self.showClose = showClose
         self.showMinimize = showMinimize
         self.showZoom = showZoom
+        self.alwaysShow = alwaysShow
         self.buttonScale = buttonScale
         self.singleControlAtCorner = singleControlAtCorner
     }
@@ -41,6 +45,7 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
         showClose = try c.decodeIfPresent(Bool.self, forKey: .showClose) ?? d.showClose
         showMinimize = try c.decodeIfPresent(Bool.self, forKey: .showMinimize) ?? d.showMinimize
         showZoom = try c.decodeIfPresent(Bool.self, forKey: .showZoom) ?? d.showZoom
+        alwaysShow = try c.decodeIfPresent(Bool.self, forKey: .alwaysShow) ?? d.alwaysShow
         let scale = try c.decodeIfPresent(Double.self, forKey: .buttonScale) ?? d.buttonScale
         buttonScale = min(max(scale, Self.buttonScaleRange.lowerBound), Self.buttonScaleRange.upperBound)
         singleControlAtCorner = try c.decodeIfPresent(Bool.self, forKey: .singleControlAtCorner) ?? d.singleControlAtCorner

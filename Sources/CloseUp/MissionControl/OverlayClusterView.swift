@@ -8,6 +8,10 @@ import SwiftUI
 @Observable
 final class OverlayHoverState {
     var hoveredIndex: Int?
+    /// The window whose cluster is the interactive one. Always-show clusters (one
+    /// persistent window per thumbnail) dim/brighten by comparing against this
+    /// instead of being rebuilt, so a hover change animates instead of re-ordering windows.
+    var hoveredWindowID: CGWindowID?
 }
 
 /// The visual button cluster drawn over the hovered Mission Control thumbnail.
@@ -22,6 +26,15 @@ struct OverlayClusterView: View {
     let geometry: OverlayGeometry
     let locale: Locale
     let hoverState: OverlayHoverState
+    /// Set for an always-show cluster, which stays dim until `hoverState.hoveredWindowID`
+    /// is its window; nil for the separate interactive overlay (always bright).
+    var windowID: CGWindowID?
+    /// Fade/scale in on first render. Only for a cluster appearing where none was
+    /// showing — a replacement window must not re-fade (the forced re-anchors would flicker).
+    var animateIn = false
+    @State private var appeared = false
+
+    private var isHoveredWindow: Bool { windowID == nil || hoverState.hoveredWindowID == windowID }
 
     var body: some View {
         HStack(spacing: geometry.buttonSpacing) {
@@ -29,13 +42,18 @@ struct OverlayClusterView: View {
                 OverlayButtonView(
                     action: action,
                     geometry: geometry,
-                    isHovered: hoverState.hoveredIndex == index
+                    isHovered: isHoveredWindow && hoverState.hoveredIndex == index
                 )
             }
         }
         .padding(geometry.clusterPadding)
         .environment(\.locale, locale)
         .fixedSize()
+        .opacity(isHoveredWindow ? 1 : DS.Overlay.dimmedOpacity)
+        .animation(DS.Motion.overlay, value: isHoveredWindow)
+        .scaleEffect(animateIn && !appeared ? DS.Overlay.appearScale : 1)
+        .opacity(animateIn && !appeared ? 0 : 1)
+        .onAppear { withAnimation(DS.Motion.overlayAppear) { appeared = true } }
     }
 }
 

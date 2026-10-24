@@ -10,7 +10,7 @@ import SwiftUI
 /// observers, timers, and an `NSWindow`.
 @MainActor
 final class MissionControlEngine {
-    /// Provides the overlay settings (enabled actions, size) — read
+    /// Provides the overlay settings (enabled actions, size, always-show) — read
     /// live so a settings change takes effect on the next show.
     private let settingsProvider: () -> OverlaySettings
     /// Resolves the key chord for an in-MC shortcut (defaults, or a
@@ -40,6 +40,9 @@ final class MissionControlEngine {
     private var overlayWindow: NSWindow?
     /// Every overlay window not yet closed; `endSession` sweeps it so an orphaned window can't outlive the session.
     private var liveOverlayWindows: [ObjectIdentifier: NSWindow] = [:]
+    /// Always-show mode's passive clusters, one per eligible window INCLUDING the hovered one (see
+    /// `syncAmbientOverlays`). Same immutability rule as `overlayWindow`.
+    private var ambientWindows: [CGWindowID: NSWindow] = [:]
     private var windows: [WindowInfo] = []
     private var hovered: WindowInfo?
     /// Cursor location at the last overlay resolve, used only as a SECONDARY guard to
@@ -507,6 +510,7 @@ final class MissionControlEngine {
         resetSettleState() // the new space re-tiles — hide until it settles
         hovered = nil
         retireOverlayWindow(blank: true)
+        syncAmbientOverlays() // not settled → retire until the new space settles
         refreshWindows()
         Log.missionControl.debug("resync: windows=\(self.windows.count, privacy: .public) pivot=\(Int(self.pivotHeight), privacy: .public)")
     }
@@ -532,6 +536,7 @@ final class MissionControlEngine {
         // lifetime and is what re-opens the session when MC comes back.
         tap.stop()
         clearOverlayContent(blank: true)
+        syncAmbientOverlays() // session inactive → retires every ambient cluster
         // Safety net: any window whose reference was dropped without a discard.
         for window in liveOverlayWindows.values { discard(window, blank: true) }
         hovered = nil
@@ -691,6 +696,7 @@ final class MissionControlEngine {
             if layoutSettled {
                 layoutSettled = false
                 retireOverlayWindow(blank: true)
+                syncAmbientOverlays() // not settled → retire; rebuilt at the next settle
                 hovered = nil
                 Log.missionControl.debug("layout churning → hide overlay until settle")
             }
@@ -715,7 +721,7 @@ final class MissionControlEngine {
         } else if !layoutSettled, mcSurfacePresent {
             // Only settle while MC is on screen: its EXIT animation also churns and then
             // holds still inside the ~600 ms close-miss debounce, and settling there
-            // flashed the lights on the desktop.
+            // flashed the lights (every window's, in always-show mode) on the desktop.
             churnTicks = 0
             stableTicks += 1
             if stableTicks >= Self.settleTicks { // held still → MC has finished tiling
@@ -741,6 +747,7 @@ final class MissionControlEngine {
                 retireOverlayWindow()
                 hovered = nil
                 trackMouse() // re-anchor on a fresh window now, no inter-tick gap
+                syncAmbientOverlays()
             }
         }
     }
@@ -827,6 +834,11 @@ final class MissionControlEngine {
         // only while that window's lights are shown, and always describes `hovered`.)
         // This matches how a native title bar feels — its controls stay active while
         // the pointer is on the half hanging off the thumbnail's top edge.
+        // Always-show clusters can fail to paint at settle exactly like the hovered
+        // one (#3), so they get the same forced make-before-break re-anchors.
+        if sinkWatchTicks > 0, Self.forcedReanchorTicks.contains(Self.sinkWatchTickBudget - 1 - sinkWatchTicks) {
+            syncAmbientOverlays(rebuild: true)
+        }
         let overCurrentCluster = geometry?.clusterFrameCG.contains(location) ?? false
         // First-acquisition also covers the cluster's straddle band (it hangs
         // `OverlayGeometry.topOverhang` above the thumbnail's top edge), so a
@@ -843,7 +855,7 @@ final class MissionControlEngine {
             Log.missionControl.debug("hover \(self.hovered?.windowID ?? 0, privacy: .public)→\(newHover?.windowID ?? 0, privacy: .public) cgMouse=(\(Int(location.x), privacy: .public),\(Int(location.y), privacy: .public)) windows=\(self.windows.count, privacy: .public)")
             awaitFreshHoverAfterClick = false // a fresh hover — passive re-shows are live again
             hovered = newHover
-            repositionOverlay()
+            repositionOverlay() // also syncs the ambient set
         } else if hovered != nil, !suppressOverlayReshow, sinkWatchTicks > 0 {
             // Same window, still inside the post-settle watch. The fast single-window
             // enter (#3) is the case the settle-time show did not actually paint: on a
@@ -928,7 +940,16 @@ final class MissionControlEngine {
             cornerAnchored: settings.singleControlAtCorner
         )
         geometry = geo
-        presentOverlay(geo, actions: actions)
+        hoverState.hoveredWindowID = hovered.windowID
+        // Always-show: the hovered window's persistent ambient cluster brightens in
+        // place (no window swap, so no order-in lag); only an uncached window — no
+        // ambient cluster — falls back to the separate interactive overlay.
+        syncAmbientOverlays()
+        if ambientWindows[hovered.windowID] != nil {
+            retireOverlayWindow()
+        } else {
+            presentOverlay(geo, actions: actions)
+        }
     }
 
     /// Put the cluster on screen at `geo` — always on a FRESH window born at its final
@@ -949,7 +970,7 @@ final class MissionControlEngine {
         guard sessionActive, mcSurfacePresent else { return } // never create a window once MC is gone
         let retired = overlayWindow
         let window = makeOverlayWindow(at: geo.nsWindowFrame)
-        window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState))
+        window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState, animateIn: retired == nil))
         window.orderFront(nil)
         overlayWindow = window
         if let retired { discard(retired, blank: false) }
@@ -992,6 +1013,7 @@ final class MissionControlEngine {
         for id in resolutions.keys { backgroundResolveInFlight.remove(id) }
         guard sessionActive, generation == sessionGeneration else { return }
         var hoveredResolved = false
+        var cacheGrew = false
         for (id, resolution) in resolutions {
             if case .unavailable = resolution {
                 // AX untrusted: no background resolve can ever succeed, so burn
@@ -1004,6 +1026,7 @@ final class MissionControlEngine {
             if let cache = outcome.cache {
                 if capabilityCache[id] == nil {
                     capabilityCache[id] = cache
+                    cacheGrew = true
                     // Heal only a hover that was never shown: a window that was
                     // shown (and possibly just clicked) was necessarily cached
                     // by the sync hover path already, so its merge write is
@@ -1022,6 +1045,7 @@ final class MissionControlEngine {
         if hoveredResolved, layoutSettled, geometry == nil, !suppressOverlayReshow, !awaitFreshHoverAfterClick {
             repositionOverlay()
         }
+        if cacheGrew { syncAmbientOverlays() }
         // Field tripwire: a batch of several real thumbnails where NOT ONE window
         // resolved a button — and nothing else cached this session either — is
         // the fingerprint of the AX matching pipeline breaking OS-wide
@@ -1045,6 +1069,7 @@ final class MissionControlEngine {
         retireOverlayWindow(blank: blank)
         geometry = nil
         currentActions = []
+        hoverState.hoveredWindowID = nil // all ambient clusters dim
     }
 
     // MARK: - Click & key handling
@@ -1076,11 +1101,12 @@ final class MissionControlEngine {
     }
 
     /// The user is leaving Mission Control (pass-through click, Esc, hot corner):
-    /// hide the lights now and keep them hidden through the exit animation.
+    /// hide every light now and keep them hidden through the exit animation.
     private func dismissOverlaysForExit() {
         suppressOverlayReshow = true
         scheduleSuppressReshowClear()
         hideOverlay()
+        syncAmbientOverlays() // suppressed → retire every ambient cluster too
     }
 
     /// Runs on the 25 ms fetch tick (the 60 ms hover tick can miss the brief moment
@@ -1137,6 +1163,7 @@ final class MissionControlEngine {
             try? await Task.sleep(for: .milliseconds(2000))
             guard let self, !Task.isCancelled else { return }
             self.suppressOverlayReshow = false
+            self.syncAmbientOverlays()
             // A hover that landed DURING the suppression window updated `hovered`
             // but never resolved/showed (repositionOverlay early-returns while
             // suppressed), and a parked cursor never re-triggers it — the second
@@ -1166,6 +1193,11 @@ final class MissionControlEngine {
     private func hideOverlay() {
         clearOverlayContent(blank: true)
         hoverState.hoveredIndex = nil
+        // The hovered window's ambient cluster IS its lights in always-show mode:
+        // remove it now (`syncAmbientOverlays` skips it until a fresh hover).
+        if let id = hovered?.windowID, let ambient = ambientWindows.removeValue(forKey: id) {
+            discard(ambient, blank: true)
+        }
         // Passive re-shows (background-resolve merge, suppression-clear timer)
         // must not re-light the just-clicked window; only the next fresh hover
         // may (`trackMouse` clears this on a windowID change).
@@ -1185,13 +1217,13 @@ final class MissionControlEngine {
         // without this a ⌘W/⌥⌘W in that tail would be swallowed and acted on the stale
         // hovered thumbnail. Pass the key through once the surface is gone.
         guard mcSurfacePresent else { return true }
-        // Esc closes Mission Control: hide now rather than trail the exit animation.
-        if keyCode == 53 { dismissOverlaysForExit() }
         for shortcut in MissionControlShortcut.allCases {
             guard let chord = chordProvider(shortcut), chord.matches(keyCode: keyCode, flags: flags) else { continue }
             apply(shortcut)
             return false // swallow — the shortcut consumed the key
         }
+        // Esc closes Mission Control: hide now rather than trail the exit animation.
+        if keyCode == 53 { dismissOverlaysForExit() }
         return true
     }
 
@@ -1239,6 +1271,7 @@ final class MissionControlEngine {
             // Zoom brings the window forward, so settle Mission Control first.
             performer.wakeMissionControl()
             retireOverlayWindow(blank: true)
+            retireAmbientOverlays()
         }
         performer.perform(action, on: window)
     }
@@ -1319,6 +1352,53 @@ final class MissionControlEngine {
             window.close()
             liveOverlayWindows[ObjectIdentifier(window)] = nil
         }
+    }
+
+    /// Always-show mode: put a persistent cluster on every AX-confirmed window (the
+    /// hovered one included — it brightens via `hoverState.hoveredWindowID`, except
+    /// after a click hid it, until a fresh hover), or retire them all
+    /// when the mode is off or the overlay must stay hidden (not settled, post-click
+    /// suppression, no session). Idempotent — call it after any of those inputs
+    /// change. Cache-only: an uncached window (still resolving, a popover, AX
+    /// untrusted) stays dark rather than paying AX IPC here. Existing clusters are
+    /// kept as-is (frames only change through a re-tile, which retires them all);
+    /// `rebuild` re-orders fresh ones make-before-break for the post-settle
+    /// re-anchor (#3).
+    private func syncAmbientOverlays(rebuild: Bool = false) {
+        let settings = settingsProvider()
+        guard settings.alwaysShow, sessionActive, layoutSettled, !suppressOverlayReshow else {
+            retireAmbientOverlays()
+            return
+        }
+        let requested = settings.enabledActions
+        var next: [CGWindowID: NSWindow] = [:]
+        for window in windows where !(awaitFreshHoverAfterClick && window.windowID == hovered?.windowID) && next[window.windowID] == nil {
+            guard let actions = capabilityCache[window.windowID]?.supported(from: requested), !actions.isEmpty
+            else { continue }
+            if !rebuild, let existing = ambientWindows[window.windowID] {
+                next[window.windowID] = existing
+                continue
+            }
+            let geo = OverlayGeometry(
+                windowFrame: window.frame, actionCount: actions.count,
+                pivotHeight: pivotHeight, scale: CGFloat(settings.buttonScale),
+                cornerAnchored: settings.singleControlAtCorner
+            )
+            let overlay = makeOverlayWindow(at: geo.nsWindowFrame)
+            overlay.contentView = NSHostingView(rootView: OverlayClusterView(
+                actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState, windowID: window.windowID,
+                animateIn: !rebuild && ambientWindows[window.windowID] == nil
+            ))
+            overlay.orderFront(nil)
+            next[window.windowID] = overlay
+        }
+        for (id, old) in ambientWindows where next[id] !== old { discard(old, blank: false) }
+        ambientWindows = next
+    }
+
+    private func retireAmbientOverlays() {
+        ambientWindows.values.forEach { discard($0, blank: true) }
+        ambientWindows = [:]
     }
 
     // MARK: - Screen geometry

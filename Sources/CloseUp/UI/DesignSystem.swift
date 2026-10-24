@@ -85,6 +85,10 @@ enum DS {
     enum Overlay {
         /// Hovered traffic-light lift (a render-only scale — never reflows siblings).
         static let hoverLift: CGFloat = 1.12
+        /// Opacity of an always-show cluster whose window is not hovered.
+        static let dimmedOpacity: Double = 0.45
+        /// Starting scale of the appear animation.
+        static let appearScale: CGFloat = 0.85
         /// Hairline border width around a button circle.
         static let buttonBorderWidth: CGFloat = 0.5
         /// Drop-shadow blur radius under a button.
@@ -117,6 +121,8 @@ enum DS {
     enum Motion {
         /// Overlay button appear/disappear.
         static let overlay = Animation.easeOut(duration: 0.15)
+        /// Overlay cluster first appearing where none was showing (fade + scale in).
+        static let overlayAppear = Animation.easeOut(duration: 0.1)
     }
 }
 

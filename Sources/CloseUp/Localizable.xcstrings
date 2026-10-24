@@ -209,6 +209,58 @@
         }
       }
     },
+    "Always show controls": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerelemente immer anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar siempre los controles"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours afficher les commandes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントロールを常に表示"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre mostrar os controles"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всегда показывать кнопки"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "始终显示控制按钮"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "永遠顯示控制按鈕"
+          }
+        }
+      }
+    },
     "Automatically check for updates": {
       "localizations": {
         "de": {
@@ -2285,6 +2337,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "快速鍵"
+          }
+        }
+      }
+    },
+    "Show controls on every window, not only the one under the pointer.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerelemente auf jedem Fenster anzeigen, nicht nur auf dem unter dem Zeiger."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muestra los controles en todas las ventanas, no solo en la que está bajo el puntero."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche les commandes sur chaque fenêtre, pas seulement sur celle sous le pointeur."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ポインタの下のウインドウだけでなく、すべてのウインドウにコントロールを表示します。"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostra os controles em todas as janelas, não apenas na que está sob o ponteiro."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показывать кнопки на всех окнах, а не только на окне под указателем."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在每个窗口上显示控制按钮，而不仅仅是指针下方的窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在每個視窗上顯示控制按鈕，而不僅是指標下方的視窗。"
           }
         }
       }
