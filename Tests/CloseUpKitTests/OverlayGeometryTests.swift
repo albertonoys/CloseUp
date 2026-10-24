@@ -97,4 +97,28 @@ struct OverlayGeometryTests {
         // the cluster occupies.
         #expect(g.clusterFrameCG.minY == window.minY - OverlayGeometry.topOverhang)
     }
+
+    @Test("scale enlarges the cluster but keeps the straddle and left inset")
+    func scaled() {
+        let g = OverlayGeometry(windowFrame: window, actionCount: 3, pivotHeight: pivot, scale: 1.5)
+        #expect(g.buttonSize == 33)
+        let baseWidth: CGFloat = 6 * 2 + 3 * 22 + 2 * 4 // 86
+        #expect(g.clusterSize.width == baseWidth * 1.5)
+        #expect(g.buttonRectCG(0).minX == window.minX + OverlayGeometry.edgeInset)
+        #expect(g.buttonRectCG(2).midY == window.minY)
+        #expect(g.clusterFrameCG.minY == window.minY - g.topOverhang)
+        #expect(g.hitTest(CGPoint(x: g.buttonRectCG(1).midX, y: g.buttonRectCG(1).midY)) == 1)
+    }
+
+    @Test("corner anchoring centers a lone button on the window's top-left corner")
+    func cornerAnchored() {
+        let single = OverlayGeometry(windowFrame: window, actionCount: 1, pivotHeight: pivot, scale: 1.5, cornerAnchored: true)
+        let button = single.buttonRectCG(0)
+        #expect(button.midX == window.minX)
+        #expect(button.midY == window.minY)
+        #expect(single.hitTest(CGPoint(x: button.midX, y: button.midY)) == 0)
+        // Two or more buttons ignore the flag and keep the inset row.
+        let pair = OverlayGeometry(windowFrame: window, actionCount: 2, pivotHeight: pivot, cornerAnchored: true)
+        #expect(pair.buttonRectCG(0).minX == window.minX + OverlayGeometry.edgeInset)
+    }
 }

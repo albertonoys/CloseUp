@@ -1,5 +1,10 @@
 import Foundation
 
+/// How the overlay buttons are drawn.
+public enum OverlayButtonStyle: String, Codable, CaseIterable, Sendable {
+    case standard, glass
+}
+
 /// Which overlay controls are shown, persisted as a single JSON blob. Defaults
 /// = close + minimize + maximize all on; hide/quit are keyboard-only and never
 /// appear as overlay buttons.
@@ -12,15 +17,34 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
     public var showClose: Bool
     public var showMinimize: Bool
     public var showZoom: Bool
+    /// Show the controls on every window at once, not only the hovered one.
+    public var alwaysShow: Bool
+    /// Multiplier on the traffic-light size (1 = the native-matching default).
+    public var buttonScale: Double
+    /// Center a lone control on the window's top-left corner instead of inset
+    /// along the top edge.
+    public var singleControlAtCorner: Bool
+    public var buttonStyle: OverlayButtonStyle
+
+    /// The size steps offered in Settings.
+    public static let buttonScaleRange: ClosedRange<Double> = 0.75...2.5
 
     public init(
         showClose: Bool = true,
         showMinimize: Bool = true,
-        showZoom: Bool = true
+        showZoom: Bool = true,
+        alwaysShow: Bool = false,
+        buttonScale: Double = 1,
+        singleControlAtCorner: Bool = false,
+        buttonStyle: OverlayButtonStyle = .standard
     ) {
         self.showClose = showClose
         self.showMinimize = showMinimize
         self.showZoom = showZoom
+        self.alwaysShow = alwaysShow
+        self.buttonScale = buttonScale
+        self.singleControlAtCorner = singleControlAtCorner
+        self.buttonStyle = buttonStyle
     }
 
     public init(from decoder: any Decoder) throws {
@@ -29,6 +53,12 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
         showClose = try c.decodeIfPresent(Bool.self, forKey: .showClose) ?? d.showClose
         showMinimize = try c.decodeIfPresent(Bool.self, forKey: .showMinimize) ?? d.showMinimize
         showZoom = try c.decodeIfPresent(Bool.self, forKey: .showZoom) ?? d.showZoom
+        alwaysShow = try c.decodeIfPresent(Bool.self, forKey: .alwaysShow) ?? d.alwaysShow
+        let scale = try c.decodeIfPresent(Double.self, forKey: .buttonScale) ?? d.buttonScale
+        buttonScale = min(max(scale, Self.buttonScaleRange.lowerBound), Self.buttonScaleRange.upperBound)
+        singleControlAtCorner = try c.decodeIfPresent(Bool.self, forKey: .singleControlAtCorner) ?? d.singleControlAtCorner
+        // Unknown raw value (newer build) falls back to the default instead of throwing.
+        buttonStyle = (try? c.decodeIfPresent(OverlayButtonStyle.self, forKey: .buttonStyle)) ?? d.buttonStyle
     }
 
     /// Whether a given action's button is enabled. Hide/quit are keyboard-only

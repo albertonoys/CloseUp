@@ -30,6 +30,19 @@ public struct OverlayGeometry: Equatable, Sendable {
     /// so the band always matches the zone the cluster actually occupies.
     public static let topOverhang: CGFloat = buttonSize / 2 + clusterPadding
 
+    /// The user's size multiplier; every metric below is the static base × this.
+    /// `edgeInset` stays unscaled — it is a gap to the thumbnail edge, not part of
+    /// the cluster.
+    public let scale: CGFloat
+    public var buttonSize: CGFloat { Self.buttonSize * scale }
+    public var buttonSpacing: CGFloat { Self.buttonSpacing * scale }
+    public var clusterPadding: CGFloat { Self.clusterPadding * scale }
+    public var symbolSize: CGFloat { Self.symbolSize * scale }
+    public var topOverhang: CGFloat { Self.topOverhang * scale }
+    /// Center a lone button on the window's top-left corner (it then hangs past the
+    /// left edge by `topOverhang` too). Ignored for clusters of 2+ buttons.
+    public let cornerAnchored: Bool
+
     public let windowFrame: CGRect
     public let actionCount: Int
     /// Height of the primary (menu-bar) screen — the pivot for the CG↔AppKit
@@ -37,18 +50,23 @@ public struct OverlayGeometry: Equatable, Sendable {
     /// which display the window is on.
     public let pivotHeight: CGFloat
 
-    public init(windowFrame: CGRect, actionCount: Int, pivotHeight: CGFloat) {
+    public init(
+        windowFrame: CGRect, actionCount: Int, pivotHeight: CGFloat,
+        scale: CGFloat = 1, cornerAnchored: Bool = false
+    ) {
         self.windowFrame = windowFrame
         self.actionCount = max(0, actionCount)
         self.pivotHeight = pivotHeight
+        self.scale = scale
+        self.cornerAnchored = cornerAnchored
     }
 
     public var clusterSize: CGSize {
         guard actionCount > 0 else { return .zero }
-        let width = Self.clusterPadding * 2
-            + CGFloat(actionCount) * Self.buttonSize
-            + CGFloat(actionCount - 1) * Self.buttonSpacing
-        let height = Self.clusterPadding * 2 + Self.buttonSize
+        let width = clusterPadding * 2
+            + CGFloat(actionCount) * buttonSize
+            + CGFloat(actionCount - 1) * buttonSpacing
+        let height = clusterPadding * 2 + buttonSize
         return CGSize(width: width, height: height)
     }
 
@@ -61,8 +79,10 @@ public struct OverlayGeometry: Equatable, Sendable {
     /// SwiftUI padding so the *buttons*, not the padding, land on those anchors.)
     public var clusterFrameCG: CGRect {
         CGRect(
-            x: windowFrame.minX + Self.edgeInset - Self.clusterPadding,
-            y: windowFrame.minY - Self.topOverhang,
+            x: cornerAnchored && actionCount == 1
+                ? windowFrame.minX - topOverhang
+                : windowFrame.minX + Self.edgeInset - clusterPadding,
+            y: windowFrame.minY - topOverhang,
             width: clusterSize.width,
             height: clusterSize.height
         )
@@ -77,10 +97,10 @@ public struct OverlayGeometry: Equatable, Sendable {
     /// Hit rect for the button at `index`, in CG coordinates.
     public func buttonRectCG(_ index: Int) -> CGRect {
         let cluster = clusterFrameCG
-        let x = cluster.minX + Self.clusterPadding
-            + CGFloat(index) * (Self.buttonSize + Self.buttonSpacing)
-        let y = cluster.minY + Self.clusterPadding
-        return CGRect(x: x, y: y, width: Self.buttonSize, height: Self.buttonSize)
+        let x = cluster.minX + clusterPadding
+            + CGFloat(index) * (buttonSize + buttonSpacing)
+        let y = cluster.minY + clusterPadding
+        return CGRect(x: x, y: y, width: buttonSize, height: buttonSize)
     }
 
     /// The button index hit by a CG-space point, or `nil` for a miss (outside the

@@ -493,11 +493,21 @@ behaviour (live `CGWindowList` / AX inspection) and the official headers.
   would hijack every close). Customizable via `KeyboardShortcuts.Recorder` +
   `KeyboardShortcuts.disable()` (suppress global firing) + `getShortcut(for:)`
   matched in the tap. True global hotkeys are reserved for safe actions.
+- **During MC the WindowServer applies window order-in/order-out ~110-250 ms LATE,
+  while content changes land on the next frame (measured at 120 fps).** `orderOut`
+  ran on time yet the lights trailed the exit animation. So a PURE removal (MC
+  exiting, a click, a re-tile) blanks the content first and orders out ~300 ms later
+  (`discard(_:blank: true)`); a SWAP (a fresh window replaces the old) must NOT blank
+  — the replacement's order-in lags the same way, and blanking opens a flicker gap.
+  `presentOverlay` never creates a window unless `sessionActive && mcSurfacePresent`,
+  and `endSession` discards every `liveOverlayWindows` entry so none outlives MC.
+  The settle branch runs only while the exposé surface is present: the exit
+  animation settles inside the close debounce and would re-show the lights.
 - **Any left click while MC is open dismisses the overlay instantly — then
   suppress re-show through the exit with a SELF-CLEARING flag, never a session-long
   latch.** `handleClick` `orderOut`s the overlay on every click (a button hit
   performs its action first, then hides); relying on the close-poll's `endSession`
-  (~600 ms) instead leaves the lights lingering after the click. A *pass-through*
+  (~600 ms) instead leaves the lights lingering after the click. Esc (key still passes through) and the pointer ARRIVING at a Mission Control hot corner (Dock `wvous-*-corner == 2`, no modifier, probed on the 25 ms fetch tick) hide the lights immediately the same way (`dismissOverlaysForExit`). A *pass-through*
   click (thumbnail / empty space → MC is exiting) additionally sets
   `suppressOverlayReshow`, because MC's exit animation churns thumbnail frames and
   `trackMouse` would otherwise re-show the overlay at a transient garbage top-left

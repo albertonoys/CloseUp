@@ -48,4 +48,33 @@ struct OverlaySettingsTests {
         #expect(!s.isEnabled(.hide))
         #expect(!s.isEnabled(.quit))
     }
+
+    @Test("always-show defaults off and size defaults to 1; an older blob loads them that way")
+    func displayDefaults() throws {
+        let s = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        #expect(!s.alwaysShow)
+        #expect(s.buttonScale == 1)
+    }
+
+    @Test("a stored size outside the offered range is clamped on load")
+    func scaleClamped() throws {
+        let big = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"buttonScale":9}"#.utf8))
+        let small = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"buttonScale":0}"#.utf8))
+        #expect(big.buttonScale == OverlaySettings.buttonScaleRange.upperBound)
+        #expect(small.buttonScale == OverlaySettings.buttonScaleRange.lowerBound)
+    }
+
+    @Test("single-control-in-corner defaults off for an older blob")
+    func cornerDefault() throws {
+        let s = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        #expect(!s.singleControlAtCorner)
+    }
+
+    @Test("button style defaults to standard for an older or unknown blob")
+    func styleDefault() throws {
+        let old = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        let bad = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"buttonStyle":"neon"}"#.utf8))
+        #expect(old.buttonStyle == .standard)
+        #expect(bad.buttonStyle == .standard)
+    }
 }
