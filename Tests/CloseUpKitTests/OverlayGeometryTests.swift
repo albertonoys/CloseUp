@@ -109,4 +109,16 @@ struct OverlayGeometryTests {
         #expect(g.clusterFrameCG.minY == window.minY - g.topOverhang)
         #expect(g.hitTest(CGPoint(x: g.buttonRectCG(1).midX, y: g.buttonRectCG(1).midY)) == 1)
     }
+
+    @Test("corner anchoring centers a lone button on the window's top-left corner")
+    func cornerAnchored() {
+        let single = OverlayGeometry(windowFrame: window, actionCount: 1, pivotHeight: pivot, scale: 1.5, cornerAnchored: true)
+        let button = single.buttonRectCG(0)
+        #expect(button.midX == window.minX)
+        #expect(button.midY == window.minY)
+        #expect(single.hitTest(CGPoint(x: button.midX, y: button.midY)) == 0)
+        // Two or more buttons ignore the flag and keep the inset row.
+        let pair = OverlayGeometry(windowFrame: window, actionCount: 2, pivotHeight: pivot, cornerAnchored: true)
+        #expect(pair.buttonRectCG(0).minX == window.minX + OverlayGeometry.edgeInset)
+    }
 }

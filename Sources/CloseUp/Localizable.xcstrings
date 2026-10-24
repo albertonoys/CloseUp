@@ -2341,6 +2341,58 @@
         }
       }
     },
+    "Single control in the corner": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einzelnes Steuerelement in der Ecke"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Control único en la esquina"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commande unique dans le coin"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "単独のコントロールを角に表示"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controle único no canto"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одна кнопка в углу"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "单个控制按钮置于角落"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "單一控制按鈕置於角落"
+          }
+        }
+      }
+    },
     "Stable": {
       "localizations": {
         "de": {
@@ -2545,6 +2597,58 @@
           "stringUnit": {
             "state": "translated",
             "value": "更新"
+          }
+        }
+      }
+    },
+    "When only one control is shown, center it on the window's top-left corner.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn nur ein Steuerelement angezeigt wird, wird es auf der oberen linken Ecke des Fensters zentriert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuando solo se muestra un control, se centra en la esquina superior izquierda de la ventana."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lorsqu’une seule commande est affichée, elle est centrée sur le coin supérieur gauche de la fenêtre."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コントロールが1つだけ表示されるとき、ウインドウの左上隅の中央に配置します。"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quando apenas um controle é mostrado, ele fica centralizado no canto superior esquerdo da janela."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если показана только одна кнопка, она располагается по центру левого верхнего угла окна."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅显示一个控制按钮时，将其居中放在窗口的左上角。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅顯示一個控制按鈕時，將其置中放在視窗的左上角。"
           }
         }
       }

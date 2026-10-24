@@ -128,4 +128,13 @@ struct WindowInfoTests {
         #expect([ghost, real].frontmost(containing: point)?.windowID == 9)
         #expect([ghost, real].anchoredOnScreen(displays: displays, inset: 8).frontmost(containing: point)?.windowID == 3)
     }
+
+    @Test("frontmost(leftOverhang:) acquires a window from the band left of its top-left corner")
+    func frontmostWithLeftOverhang() {
+        let w = WindowInfo(windowID: 1, ownerPID: 1, ownerName: "A", frame: CGRect(x: 100, y: 200, width: 400, height: 300))
+        let leftOfCorner = CGPoint(x: 100 - 8, y: 200 + 8) // outer-left half of a corner button
+        #expect([w].frontmost(containing: leftOfCorner, topOverhang: 16) == nil)
+        #expect([w].frontmost(containing: leftOfCorner, topOverhang: 16, leftOverhang: 16)?.windowID == 1)
+        #expect([w].frontmost(containing: CGPoint(x: 100 - 8, y: 200 + 24), topOverhang: 16, leftOverhang: 16) == nil)
+    }
 }

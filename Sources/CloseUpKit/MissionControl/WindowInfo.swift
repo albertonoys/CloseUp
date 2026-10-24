@@ -79,14 +79,16 @@ public extension Array where Element == WindowInfo {
     /// frame). In CG coordinates the top edge is `minY` and "above" is smaller Y.
     /// The live engine's `overCurrentCluster` stickiness only KEEPS an
     /// already-hovered window; this is what lets the *first* hover land there too.
-    func frontmost(containing point: CGPoint, topOverhang: CGFloat) -> WindowInfo? {
+    /// `leftOverhang` widens the band past the left edge for a corner-anchored
+    /// lone button, which hangs off both edges.
+    func frontmost(containing point: CGPoint, topOverhang: CGFloat, leftOverhang: CGFloat = 0) -> WindowInfo? {
         first { window in
             if window.frame.contains(point) { return true }
             let band = CGRect(
-                x: window.frame.minX,
+                x: window.frame.minX - leftOverhang,
                 y: window.frame.minY - topOverhang,
-                width: window.frame.width,
-                height: topOverhang
+                width: window.frame.width + leftOverhang,
+                height: topOverhang + (leftOverhang > 0 ? topOverhang : 0)
             )
             return band.contains(point)
         }

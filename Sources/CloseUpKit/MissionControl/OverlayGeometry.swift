@@ -39,6 +39,9 @@ public struct OverlayGeometry: Equatable, Sendable {
     public var clusterPadding: CGFloat { Self.clusterPadding * scale }
     public var symbolSize: CGFloat { Self.symbolSize * scale }
     public var topOverhang: CGFloat { Self.topOverhang * scale }
+    /// Center a lone button on the window's top-left corner (it then hangs past the
+    /// left edge by `topOverhang` too). Ignored for clusters of 2+ buttons.
+    public let cornerAnchored: Bool
 
     public let windowFrame: CGRect
     public let actionCount: Int
@@ -47,11 +50,15 @@ public struct OverlayGeometry: Equatable, Sendable {
     /// which display the window is on.
     public let pivotHeight: CGFloat
 
-    public init(windowFrame: CGRect, actionCount: Int, pivotHeight: CGFloat, scale: CGFloat = 1) {
+    public init(
+        windowFrame: CGRect, actionCount: Int, pivotHeight: CGFloat,
+        scale: CGFloat = 1, cornerAnchored: Bool = false
+    ) {
         self.windowFrame = windowFrame
         self.actionCount = max(0, actionCount)
         self.pivotHeight = pivotHeight
         self.scale = scale
+        self.cornerAnchored = cornerAnchored
     }
 
     public var clusterSize: CGSize {
@@ -72,7 +79,9 @@ public struct OverlayGeometry: Equatable, Sendable {
     /// SwiftUI padding so the *buttons*, not the padding, land on those anchors.)
     public var clusterFrameCG: CGRect {
         CGRect(
-            x: windowFrame.minX + Self.edgeInset - clusterPadding,
+            x: cornerAnchored && actionCount == 1
+                ? windowFrame.minX - topOverhang
+                : windowFrame.minX + Self.edgeInset - clusterPadding,
             y: windowFrame.minY - topOverhang,
             width: clusterSize.width,
             height: clusterSize.height

@@ -44,6 +44,11 @@ struct GeneralSettingsPane: View {
                 Toggle(appState.loc("Close"), isOn: $appState.overlaySettings.showClose)
                 Toggle(appState.loc("Minimize"), isOn: $appState.overlaySettings.showMinimize)
                 Toggle(appState.loc("Maximize"), isOn: $appState.overlaySettings.showZoom)
+                Toggle(isOn: $appState.overlaySettings.singleControlAtCorner) {
+                    Text(appState.loc("Single control in the corner"))
+                    Text(appState.loc("When only one control is shown, center it on the window's top-left corner."))
+                        .settingsFooter()
+                }
                 Slider(
                     value: $appState.overlaySettings.buttonScale,
                     in: OverlaySettings.buttonScaleRange,

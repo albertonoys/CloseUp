@@ -14,6 +14,9 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
     public var showZoom: Bool
     /// Multiplier on the traffic-light size (1 = the native-matching default).
     public var buttonScale: Double
+    /// Center a lone control on the window's top-left corner instead of inset
+    /// along the top edge.
+    public var singleControlAtCorner: Bool
 
     /// The size steps offered in Settings.
     public static let buttonScaleRange: ClosedRange<Double> = 0.75...2.5
@@ -22,12 +25,14 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
         showClose: Bool = true,
         showMinimize: Bool = true,
         showZoom: Bool = true,
-        buttonScale: Double = 1
+        buttonScale: Double = 1,
+        singleControlAtCorner: Bool = false
     ) {
         self.showClose = showClose
         self.showMinimize = showMinimize
         self.showZoom = showZoom
         self.buttonScale = buttonScale
+        self.singleControlAtCorner = singleControlAtCorner
     }
 
     public init(from decoder: any Decoder) throws {
@@ -38,6 +43,7 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
         showZoom = try c.decodeIfPresent(Bool.self, forKey: .showZoom) ?? d.showZoom
         let scale = try c.decodeIfPresent(Double.self, forKey: .buttonScale) ?? d.buttonScale
         buttonScale = min(max(scale, Self.buttonScaleRange.lowerBound), Self.buttonScaleRange.upperBound)
+        singleControlAtCorner = try c.decodeIfPresent(Bool.self, forKey: .singleControlAtCorner) ?? d.singleControlAtCorner
     }
 
     /// Whether a given action's button is enabled. Hide/quit are keyboard-only

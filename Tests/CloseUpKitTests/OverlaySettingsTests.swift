@@ -62,4 +62,10 @@ struct OverlaySettingsTests {
         #expect(big.buttonScale == OverlaySettings.buttonScaleRange.upperBound)
         #expect(small.buttonScale == OverlaySettings.buttonScaleRange.lowerBound)
     }
+
+    @Test("single-control-in-corner defaults off for an older blob")
+    func cornerDefault() throws {
+        let s = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        #expect(!s.singleControlAtCorner)
+    }
 }

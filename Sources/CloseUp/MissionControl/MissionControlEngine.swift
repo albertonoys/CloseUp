@@ -835,9 +835,10 @@ final class MissionControlEngine {
         // `overCurrentCluster` keep-case). Matches the zone the cluster occupies.
         let settings = settingsProvider()
         let overhang = OverlayGeometry.topOverhang * CGFloat(settings.buttonScale)
+        let cornerMode = settings.singleControlAtCorner && settings.enabledActions.count == 1
         let newHover = (overCurrentCluster && hovered != nil)
             ? hovered
-            : windows.frontmost(containing: location, topOverhang: overhang)
+            : windows.frontmost(containing: location, topOverhang: overhang, leftOverhang: cornerMode ? overhang : 0)
         if newHover?.windowID != hovered?.windowID {
             Log.missionControl.debug("hover \(self.hovered?.windowID ?? 0, privacy: .public)→\(newHover?.windowID ?? 0, privacy: .public) cgMouse=(\(Int(location.x), privacy: .public),\(Int(location.y), privacy: .public)) windows=\(self.windows.count, privacy: .public)")
             awaitFreshHoverAfterClick = false // a fresh hover — passive re-shows are live again
@@ -923,7 +924,8 @@ final class MissionControlEngine {
         currentActions = actions
         let geo = OverlayGeometry(
             windowFrame: hovered.frame, actionCount: actions.count,
-            pivotHeight: pivotHeight, scale: CGFloat(settings.buttonScale)
+            pivotHeight: pivotHeight, scale: CGFloat(settings.buttonScale),
+            cornerAnchored: settings.singleControlAtCorner
         )
         geometry = geo
         presentOverlay(geo, actions: actions)
