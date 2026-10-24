@@ -38,6 +38,8 @@ final class MissionControlEngine {
     /// `presentOverlay`), so it can never pick up the system's implicit
     /// window-move animation during Mission Control (#6).
     private var overlayWindow: NSWindow?
+    /// Every overlay window not yet closed; `endSession` sweeps it so an orphaned window can't outlive the session.
+    private var liveOverlayWindows: [ObjectIdentifier: NSWindow] = [:]
     private var windows: [WindowInfo] = []
     private var hovered: WindowInfo?
     /// Cursor location at the last overlay resolve, used only as a SECONDARY guard to
@@ -167,7 +169,7 @@ final class MissionControlEngine {
     /// `mergeBackgroundResolutions`. Reset at every `beginSession`.
     private var loggedPrewarmAllDark = false
 
-    /// Consecutive churning refreshes (~100 ms each) while a session is live,
+    /// Consecutive churning refreshes (25 ms each) while a session is live,
     /// for the settle-starvation field tripwire: a macOS release that re-animates
     /// Mission Control (continuous micro-motion / long eased tails) keeps
     /// `didRetile` reading churn forever, `layoutSettled` never flips true, and
@@ -254,6 +256,13 @@ final class MissionControlEngine {
     /// (`suppressReshowTask`) so a click that leaves MC open (e.g. empty space)
     /// can't strand the lights off for the rest of the session.
     private var suppressOverlayReshow = false
+    /// Display corners (CG coords) whose hot corner toggles Mission Control, read at
+    /// session begin. The pointer ARRIVING at one is the user closing MC, so the
+    /// lights go at once instead of trailing the exit animation's frame churn.
+    private var missionControlHotCorners: [CGPoint] = []
+    /// Pointer position at the last hot-corner probe; nil at session begin so a
+    /// session opened FROM a hot corner (pointer parked there) never self-dismisses.
+    private var lastHotCornerProbeLocation: CGPoint?
     private var suppressReshowTask: Task<Void, Never>?
 
     private var isRunning = false
@@ -365,8 +374,10 @@ final class MissionControlEngine {
         // frame-stability settle gate's job (`layoutSettled`), not the cursor guard.
         clearReshowSuppression() // fresh MC session — lights live again
         pivotHeight = Self.menuBarScreenHeight()
+        missionControlHotCorners = Self.readMissionControlHotCorners()
+        lastHotCornerProbeLocation = nil
         refreshWindows()
-        Log.missionControl.notice("session begin (windows=\(self.windows.count, privacy: .public))")
+        Log.missionControl.notice("session begin (windows=\(self.windows.count, privacy: .public) hotCorners=\(self.missionControlHotCorners.count, privacy: .public))")
 
         tap.start(handlers: EventTap.Handlers(
             onClick: { [weak self] point in self?.handleClick(at: point) ?? true },
@@ -386,13 +397,18 @@ final class MissionControlEngine {
         }
         fetchTask?.cancel()
         fetchTask = Task { @MainActor [weak self] in
+            var tick = 0
             while !Task.isCancelled {
-                // 100 ms (not 250) so the window list tracks Mission Control's
-                // re-tile animation closely after a Space switch, when stale
-                // frames are what strand the overlay.
-                try? await Task.sleep(for: .milliseconds(100))
-                guard !Task.isCancelled else { return }
-                self?.refreshWindows()
+                // Refresh every 25 ms: CGWindowList jumps thumbnails straight to their
+                // FINAL frames (one churning refresh, then still), so settle latency is
+                // pure sampling delay — a fine cadence detects the jump and the hold
+                // promptly, and the EXIT animation's first movement hides the lights
+                // at once. The AX prewarm/retry stays on the 100 ms beat.
+                try? await Task.sleep(for: .milliseconds(25))
+                guard !Task.isCancelled, let self else { return }
+                tick += 1
+                self.probeHotCornerExit()
+                self.refreshWindows(prewarm: tick % 4 == 0)
             }
         }
     }
@@ -490,7 +506,7 @@ final class MissionControlEngine {
         pivotHeight = Self.menuBarScreenHeight()
         resetSettleState() // the new space re-tiles — hide until it settles
         hovered = nil
-        retireOverlayWindow()
+        retireOverlayWindow(blank: true)
         refreshWindows()
         Log.missionControl.debug("resync: windows=\(self.windows.count, privacy: .public) pivot=\(Int(self.pivotHeight), privacy: .public)")
     }
@@ -515,7 +531,9 @@ final class MissionControlEngine {
         // NB: do NOT cancel `lifecycleTask` here — it runs for the engine's whole
         // lifetime and is what re-opens the session when MC comes back.
         tap.stop()
-        clearOverlayContent()
+        clearOverlayContent(blank: true)
+        // Safety net: any window whose reference was dropped without a discard.
+        for window in liveOverlayWindows.values { discard(window, blank: true) }
         hovered = nil
         hoverState.hoveredIndex = nil
         if wasLive { Log.missionControl.notice("session end") }
@@ -592,7 +610,7 @@ final class MissionControlEngine {
         armObserver()
     }
 
-    private func refreshWindows() {
+    private func refreshWindows(prewarm: Bool = true) {
         let overlayID = overlayWindow.map { CGWindowID($0.windowNumber) }
         // Exclude system owners by PID: `kCGWindowOwnerName` is LOCALIZED ("程序坞",
         // …), so the name-based exclusion silently misses on every non-English
@@ -638,7 +656,7 @@ final class MissionControlEngine {
         // on later ticks it retries blank windows (bounded) and covers windows
         // that appear mid-session. The filter inside makes the steady state a
         // cheap no-op.
-        if sessionActive { requestBackgroundResolve(windows) }
+        if sessionActive, prewarm { requestBackgroundResolve(windows) }
 
         // Gate the overlay on the thumbnail layout being SETTLED, detected by
         // frame churn. The same mechanism covers Mission Control's *enter* animation
@@ -672,7 +690,7 @@ final class MissionControlEngine {
             sinkWatchTicks = 0
             if layoutSettled {
                 layoutSettled = false
-                retireOverlayWindow()
+                retireOverlayWindow(blank: true)
                 hovered = nil
                 Log.missionControl.debug("layout churning → hide overlay until settle")
             }
@@ -692,9 +710,12 @@ final class MissionControlEngine {
                 degradedSettle = true
                 churnTicks = 0
                 let sample = ThumbnailLayout.churnSample(from: oldFrames, to: newFrames)
-                Log.missionControl.notice("layout never settled — churning \(Self.churnStarvationTicks, privacy: .public) consecutive refreshes (~\(Self.churnStarvationTicks / 10, privacy: .public) s), falling back to degraded settle (tolerance \(Self.degradedSettleTolerancePx, privacy: .public)px): \(sample, privacy: .public)")
+                Log.missionControl.notice("layout never settled — churning \(Self.churnStarvationTicks, privacy: .public) consecutive refreshes (~\(Self.churnStarvationTicks / 40, privacy: .public) s), falling back to degraded settle (tolerance \(Self.degradedSettleTolerancePx, privacy: .public)px): \(sample, privacy: .public)")
             }
-        } else if !layoutSettled {
+        } else if !layoutSettled, mcSurfacePresent {
+            // Only settle while MC is on screen: its EXIT animation also churns and then
+            // holds still inside the ~600 ms close-miss debounce, and settling there
+            // flashed the lights on the desktop.
             churnTicks = 0
             stableTicks += 1
             if stableTicks >= Self.settleTicks { // held still → MC has finished tiling
@@ -724,12 +745,14 @@ final class MissionControlEngine {
         }
     }
 
-    /// How many consecutive still refreshes (~100 ms each) mark the layout as
-    /// "settled". Two (~200 ms) debounces the enter/re-tile animation's mid-flight
-    /// micro-pauses into a single show, with no perceptible delay once MC is at rest.
-    private static let settleTicks = 2
+    /// How many consecutive still refreshes mark the layout as "settled". The loop
+    /// sleeps 25 ms but measured ticks land ~40–45 ms apart (main-actor work), so
+    /// four is ~150–180 ms; it debounces the enter/re-tile animation's mid-flight
+    /// micro-pauses into a single show; with the WindowServer's ~110 ms order-in lag
+    /// the lights land about as MC's ~265 ms enter animation finishes.
+    private static let settleTicks = 4
 
-    /// Consecutive churning refreshes (~100 ms each) after which the settle gate is
+    /// Consecutive churning refreshes (25 ms each) after which the settle gate is
     /// considered STARVED: the tripwire logs its one-shot churn sample and the
     /// engine falls back to degraded settle. ~5 s: comfortably beyond any real
     /// Mission Control enter or re-tile animation, so it can only fire when the
@@ -737,12 +760,12 @@ final class MissionControlEngine {
     /// it is holding a paused interactive scrub for 5+ s, where showing the lights
     /// is acceptable (the original "paused swipe shows early" bug was an
     /// IMMEDIATE show on every brief pause, not a 5 s hold).
-    private static let churnStarvationTicks = 50
+    private static let churnStarvationTicks = 200
 
     /// Per-edge integer-pixel movement still treated as "holding still" in
     /// degraded-settle mode. 2 px: absorbs ease-out tails and animation
-    /// micro-jitter (sub-2 px/100 ms), while a real re-tile — tens of pixels per
-    /// tick — still reads as churn and keeps the overlay hidden mid-animation.
+    /// micro-jitter (sub-2 px per 25 ms tick), while a real re-tile — tens of pixels per
+    /// 100 ms — still reads as churn and keeps the overlay hidden mid-animation.
     private static let degradedSettleTolerancePx = 2
 
     /// How many `trackMouse` ticks (~60 ms each) after a settle to keep re-asserting
@@ -861,7 +884,7 @@ final class MissionControlEngine {
         // through the exit animation's frame churn so it doesn't flash back on (often
         // at a garbage top-left position) before the session ends.
         guard !suppressOverlayReshow else {
-            retireOverlayWindow()
+            retireOverlayWindow(blank: true)
             return
         }
         guard let hovered else {
@@ -915,13 +938,13 @@ final class MissionControlEngine {
     /// bug, where content mounted into a `.zero` window and then animated out as the
     /// window grew — with no `setFrame` at all.
     private func presentOverlay(_ geo: OverlayGeometry, actions: [WindowAction]) {
+        guard sessionActive, mcSurfacePresent else { return } // never create a window once MC is gone
         let retired = overlayWindow
         let window = makeOverlayWindow(at: geo.nsWindowFrame)
         window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, locale: localeProvider(), hoverState: hoverState))
         window.orderFront(nil)
         overlayWindow = window
-        retired?.orderOut(nil)
-        retired?.close()
+        if let retired { discard(retired, blank: false) }
         let f = geo.nsWindowFrame
         Log.missionControl.debug("overlay show win=\(window.windowNumber, privacy: .public) actions=\(actions.count, privacy: .public) ns=(\(Int(f.minX), privacy: .public),\(Int(f.minY), privacy: .public) \(Int(f.width), privacy: .public)x\(Int(f.height), privacy: .public)) visible=\(window.isVisible ? "y" : "n", privacy: .public) onActiveSpace=\(window.isOnActiveSpace ? "y" : "n", privacy: .public) screen=\(window.screen != nil ? "y" : "n", privacy: .public)")
     }
@@ -1010,8 +1033,8 @@ final class MissionControlEngine {
 
     /// Hide the overlay window and drop the resolved geometry + action mapping. The
     /// shared "clear the overlay" sequence for the no-window / no-actions paths.
-    private func clearOverlayContent() {
-        retireOverlayWindow()
+    private func clearOverlayContent(blank: Bool = false) {
+        retireOverlayWindow(blank: blank)
         geometry = nil
         currentActions = []
     }
@@ -1040,10 +1063,48 @@ final class MissionControlEngine {
         // AND suppress re-show through MC's exit animation so they don't flash back
         // on at a garbage position before `endSession`. Then pass through so Mission
         // Control still handles it (switch / exit).
+        dismissOverlaysForExit()
+        return true // pass through — Mission Control handles the click
+    }
+
+    /// The user is leaving Mission Control (pass-through click, Esc, hot corner):
+    /// hide the lights now and keep them hidden through the exit animation.
+    private func dismissOverlaysForExit() {
         suppressOverlayReshow = true
         scheduleSuppressReshowClear()
         hideOverlay()
-        return true // pass through — Mission Control handles the click
+    }
+
+    /// Runs on the 25 ms fetch tick (the 60 ms hover tick can miss the brief moment
+    /// between the pointer reaching the corner and MC starting to close). Only an
+    /// ARRIVAL counts, so a pointer that opened MC from the corner is ignored.
+    private func probeHotCornerExit() {
+        guard !missionControlHotCorners.isEmpty, let location = CGEvent(source: nil)?.location else { return }
+        defer { lastHotCornerProbeLocation = location }
+        guard layoutSettled, !suppressOverlayReshow, let last = lastHotCornerProbeLocation,
+              isAtMissionControlHotCorner(location), !isAtMissionControlHotCorner(last)
+        else { return }
+        dismissOverlaysForExit()
+    }
+
+    private func isAtMissionControlHotCorner(_ point: CGPoint) -> Bool {
+        missionControlHotCorners.contains { abs($0.x - point.x) <= 2 && abs($0.y - point.y) <= 2 }
+    }
+
+    /// Corners whose Dock hot-corner action is Mission Control (`wvous-*-corner`
+    /// == 2) with no modifier key, on every active display.
+    private static func readMissionControlHotCorners() -> [CGPoint] {
+        guard let dock = UserDefaults(suiteName: "com.apple.dock") else { return [] }
+        let corners: [(String, (CGRect) -> CGPoint)] = [
+            ("tl", { CGPoint(x: $0.minX, y: $0.minY) }),
+            ("tr", { CGPoint(x: $0.maxX - 1, y: $0.minY) }),
+            ("bl", { CGPoint(x: $0.minX, y: $0.maxY - 1) }),
+            ("br", { CGPoint(x: $0.maxX - 1, y: $0.maxY - 1) }),
+        ]
+        let active = corners.filter { key, _ in
+            dock.integer(forKey: "wvous-\(key)-corner") == 2 && dock.integer(forKey: "wvous-\(key)-modifier") == 0
+        }
+        return activeDisplayBoundsCG().flatMap { display in active.map { $0.1(display) } }
     }
 
     /// A middle / other-button click, routed through the SAME button hit-test as a
@@ -1095,7 +1156,7 @@ final class MissionControlEngine {
     /// mapping so a follow-up click in the same spot can't re-trigger a now-hidden
     /// button. Keeps `hovered` so a same-window tick doesn't re-show the lights.
     private func hideOverlay() {
-        clearOverlayContent()
+        clearOverlayContent(blank: true)
         hoverState.hoveredIndex = nil
         // Passive re-shows (background-resolve merge, suppression-clear timer)
         // must not re-light the just-clicked window; only the next fresh hover
@@ -1116,6 +1177,8 @@ final class MissionControlEngine {
         // without this a ⌘W/⌥⌘W in that tail would be swallowed and acted on the stale
         // hovered thumbnail. Pass the key through once the surface is gone.
         guard mcSurfacePresent else { return true }
+        // Esc closes Mission Control: hide now rather than trail the exit animation.
+        if keyCode == 53 { dismissOverlaysForExit() }
         for shortcut in MissionControlShortcut.allCases {
             guard let chord = chordProvider(shortcut), chord.matches(keyCode: keyCode, flags: flags) else { continue }
             apply(shortcut)
@@ -1167,7 +1230,7 @@ final class MissionControlEngine {
         if action == .zoom {
             // Zoom brings the window forward, so settle Mission Control first.
             performer.wakeMissionControl()
-            retireOverlayWindow()
+            retireOverlayWindow(blank: true)
         }
         performer.perform(action, on: window)
     }
@@ -1210,6 +1273,7 @@ final class MissionControlEngine {
         // regression-test locally.
         if #available(macOS 27.0, *) { behavior.insert(.stationary) }
         window.collectionBehavior = behavior
+        liveOverlayWindows[ObjectIdentifier(window)] = window
         return window
     }
 
@@ -1219,11 +1283,34 @@ final class MissionControlEngine {
     /// ordered-in before a Mission Control re-tile stays sunk behind the rebuilt
     /// exposé surface (while reporting a false `visible=y`); only a window ordered-in
     /// *after* the re-tile composites above it, and every show is exactly that.
-    private func retireOverlayWindow() {
+    private func retireOverlayWindow(blank: Bool = false) {
         guard let window = overlayWindow else { return }
         overlayWindow = nil
-        window.orderOut(nil)
-        window.close()
+        discard(window, blank: blank)
+    }
+
+    /// Take an overlay window off screen. During Mission Control the WindowServer
+    /// applies window ordering ~120 ms late (recorded at 120 fps: the lights trailed
+    /// the exit animation although `orderOut` ran on time), while a content change
+    /// lands on the next frame. So a PURE removal (`blank`: MC exiting, a click, a
+    /// re-tile) blanks the content now and orders out a beat later. A SWAP (a new
+    /// window replaces this one) must not blank: the replacement's order-in lags
+    /// the same ~120 ms, and blanking the old one opened a visible flicker gap.
+    private func discard(_ window: NSWindow, blank: Bool) {
+        guard blank else {
+            window.orderOut(nil)
+            window.close()
+            liveOverlayWindows[ObjectIdentifier(window)] = nil
+            return
+        }
+        window.contentView?.isHidden = true
+        window.displayIfNeeded()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            window.orderOut(nil)
+            window.close()
+            liveOverlayWindows[ObjectIdentifier(window)] = nil
+        }
     }
 
     // MARK: - Screen geometry
