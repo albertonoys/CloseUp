@@ -29,6 +29,7 @@ struct OverlayClusterView: View {
     /// Set for an always-show cluster, which stays dim until `hoverState.hoveredWindowID`
     /// is its window; nil for the separate interactive overlay (always bright).
     var windowID: CGWindowID?
+    var style: OverlayButtonStyle = .standard
     /// Fade/scale in on first render. Only for a cluster appearing where none was
     /// showing — a replacement window must not re-fade (the forced re-anchors would flicker).
     var animateIn = false
@@ -42,6 +43,7 @@ struct OverlayClusterView: View {
                 OverlayButtonView(
                     action: action,
                     geometry: geometry,
+                    style: style,
                     isHovered: isHoveredWindow && hoverState.hoveredIndex == index
                 )
             }
@@ -60,20 +62,59 @@ struct OverlayClusterView: View {
 private struct OverlayButtonView: View {
     let action: WindowAction
     let geometry: OverlayGeometry
+    let style: OverlayButtonStyle
     let isHovered: Bool
 
     var body: some View {
-        ZStack {
-            Circle().fill(DS.Palette.overlayButtonFill)
-            Image(systemName: action.symbolName)
-                .font(.system(size: geometry.symbolSize, weight: .bold))
-                .foregroundStyle(DS.Palette.overlayButtonSymbol)
-        }
-        .frame(width: geometry.buttonSize, height: geometry.buttonSize)
-        .overlay(Circle().strokeBorder(DS.Palette.overlayButtonBorder, lineWidth: DS.Overlay.buttonBorderWidth))
-        .shadow(color: DS.Palette.overlayButtonShadow, radius: DS.Overlay.buttonShadowRadius, y: DS.Overlay.buttonShadowYOffset)
-        .scaleEffect(isHovered ? DS.Overlay.hoverLift : 1.0)
-        .animation(DS.Motion.overlay, value: isHovered)
-        .help(LocalizedStringKey(action.titleKey))
+        face
+            .frame(width: geometry.buttonSize, height: geometry.buttonSize)
+            .scaleEffect(isHovered ? DS.Overlay.hoverLift : 1.0)
+            .animation(DS.Motion.overlay, value: isHovered)
+            .help(LocalizedStringKey(action.titleKey))
     }
+
+    private var glyph: some View {
+        Image(systemName: action.symbolName)
+            .font(.system(size: geometry.symbolSize, weight: .bold))
+    }
+
+    @ViewBuilder
+    private var face: some View {
+        if style == .glass {
+            glassFace
+        } else {
+            ZStack {
+                Circle().fill(DS.Palette.overlayButtonFill)
+                glyph.foregroundStyle(DS.Palette.overlayButtonSymbol)
+            }
+            .overlay(Circle().strokeBorder(DS.Palette.overlayButtonBorder, lineWidth: DS.Overlay.buttonBorderWidth))
+            .shadow(color: DS.Palette.overlayButtonShadow, radius: DS.Overlay.buttonShadowRadius, y: DS.Overlay.buttonShadowYOffset)
+        }
+    }
+
+    /// A glass look built from a blur material, forced `.active` (see `GlassBlur`:
+    /// the overlay window is never key, so SwiftUI materials show the opaque inactive look). Not SwiftUI's `.glassEffect`: it
+    /// replays its materialize animation in every fresh overlay window and settles
+    /// near-invisible over Mission Control, so the forced re-anchors flickered.
+    private var glassFace: some View {
+        glyph.foregroundStyle(.primary)
+            .frame(width: geometry.buttonSize, height: geometry.buttonSize)
+            .background(GlassBlur().clipShape(Circle()))
+            .overlay(Circle().strokeBorder(DS.Palette.overlayButtonBorder, lineWidth: DS.Overlay.buttonBorderWidth))
+            .shadow(color: DS.Palette.overlayButtonShadow, radius: DS.Overlay.buttonShadowRadius, y: DS.Overlay.buttonShadowYOffset)
+    }
+}
+
+/// Always-active behind-window blur; `NSVisualEffectView.state = .active` keeps it translucent in a never-key window.
+private struct GlassBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.state = .active
+        v.blendingMode = .behindWindow
+        v.material = DS.Overlay.glassMaterial
+        v.isEmphasized = false
+        return v
+    }
+
+    func updateNSView(_ v: NSVisualEffectView, context: Context) {}
 }

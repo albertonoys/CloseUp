@@ -69,4 +69,12 @@ struct OverlaySettingsTests {
         let s = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
         #expect(!s.singleControlAtCorner)
     }
+
+    @Test("button style defaults to standard for an older or unknown blob")
+    func styleDefault() throws {
+        let old = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        let bad = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"buttonStyle":"neon"}"#.utf8))
+        #expect(old.buttonStyle == .standard)
+        #expect(bad.buttonStyle == .standard)
+    }
 }

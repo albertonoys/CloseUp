@@ -970,7 +970,7 @@ final class MissionControlEngine {
         guard sessionActive, mcSurfacePresent else { return } // never create a window once MC is gone
         let retired = overlayWindow
         let window = makeOverlayWindow(at: geo.nsWindowFrame)
-        window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState, animateIn: retired == nil))
+        window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState, style: settingsProvider().buttonStyle, animateIn: retired == nil))
         window.orderFront(nil)
         overlayWindow = window
         if let retired { discard(retired, blank: false) }
@@ -1386,7 +1386,7 @@ final class MissionControlEngine {
             )
             let overlay = makeOverlayWindow(at: geo.nsWindowFrame)
             overlay.contentView = NSHostingView(rootView: OverlayClusterView(
-                actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState, windowID: window.windowID,
+                actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState, windowID: window.windowID, style: settings.buttonStyle,
                 animateIn: !rebuild && ambientWindows[window.windowID] == nil
             ))
             overlay.orderFront(nil)

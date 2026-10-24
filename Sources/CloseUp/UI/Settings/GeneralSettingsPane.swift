@@ -54,6 +54,12 @@ struct GeneralSettingsPane: View {
                     Text(appState.loc("When only one control is shown, center it on the window's top-left corner."))
                         .settingsFooter()
                 }
+                Picker(selection: $appState.overlaySettings.buttonStyle) {
+                    Text(appState.loc("Default")).tag(OverlayButtonStyle.standard)
+                    Text(appState.loc("Liquid Glass")).tag(OverlayButtonStyle.glass)
+                } label: {
+                    Text(appState.loc("Button style"))
+                }
                 Slider(
                     value: $appState.overlaySettings.buttonScale,
                     in: OverlaySettings.buttonScaleRange,

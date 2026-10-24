@@ -95,6 +95,8 @@ enum DS {
         static let buttonShadowRadius: CGFloat = 1.5
         /// Drop-shadow vertical offset under a button.
         static let buttonShadowYOffset: CGFloat = 0.5
+        /// Blur material behind the Liquid Glass button style.
+        static let glassMaterial = NSVisualEffectView.Material.hudWindow
     }
 
     // MARK: - Typography (semantic macOS styles — never `.system(size:)`)
