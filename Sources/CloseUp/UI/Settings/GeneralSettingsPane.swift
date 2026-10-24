@@ -44,6 +44,13 @@ struct GeneralSettingsPane: View {
                 Toggle(appState.loc("Close"), isOn: $appState.overlaySettings.showClose)
                 Toggle(appState.loc("Minimize"), isOn: $appState.overlaySettings.showMinimize)
                 Toggle(appState.loc("Maximize"), isOn: $appState.overlaySettings.showZoom)
+                Slider(
+                    value: $appState.overlaySettings.buttonScale,
+                    in: OverlaySettings.buttonScaleRange,
+                    step: 0.25
+                ) {
+                    Text(appState.loc("Control size"))
+                }
             } header: {
                 Text(appState.loc("Controls"))
             } footer: {

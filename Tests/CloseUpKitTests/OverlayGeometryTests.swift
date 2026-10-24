@@ -97,4 +97,16 @@ struct OverlayGeometryTests {
         // the cluster occupies.
         #expect(g.clusterFrameCG.minY == window.minY - OverlayGeometry.topOverhang)
     }
+
+    @Test("scale enlarges the cluster but keeps the straddle and left inset")
+    func scaled() {
+        let g = OverlayGeometry(windowFrame: window, actionCount: 3, pivotHeight: pivot, scale: 1.5)
+        #expect(g.buttonSize == 33)
+        let baseWidth: CGFloat = 6 * 2 + 3 * 22 + 2 * 4 // 86
+        #expect(g.clusterSize.width == baseWidth * 1.5)
+        #expect(g.buttonRectCG(0).minX == window.minX + OverlayGeometry.edgeInset)
+        #expect(g.buttonRectCG(2).midY == window.minY)
+        #expect(g.clusterFrameCG.minY == window.minY - g.topOverhang)
+        #expect(g.hitTest(CGPoint(x: g.buttonRectCG(1).midX, y: g.buttonRectCG(1).midY)) == 1)
+    }
 }

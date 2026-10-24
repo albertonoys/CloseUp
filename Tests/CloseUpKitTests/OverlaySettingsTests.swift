@@ -48,4 +48,18 @@ struct OverlaySettingsTests {
         #expect(!s.isEnabled(.hide))
         #expect(!s.isEnabled(.quit))
     }
+
+    @Test("size defaults to 1; an older blob loads it that way")
+    func displayDefaults() throws {
+        let s = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"showClose":true}"#.utf8))
+        #expect(s.buttonScale == 1)
+    }
+
+    @Test("a stored size outside the offered range is clamped on load")
+    func scaleClamped() throws {
+        let big = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"buttonScale":9}"#.utf8))
+        let small = try JSONDecoder().decode(OverlaySettings.self, from: Data(#"{"buttonScale":0}"#.utf8))
+        #expect(big.buttonScale == OverlaySettings.buttonScaleRange.upperBound)
+        #expect(small.buttonScale == OverlaySettings.buttonScaleRange.lowerBound)
+    }
 }

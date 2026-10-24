@@ -19,19 +19,21 @@ final class OverlayHoverState {
 /// these views.
 struct OverlayClusterView: View {
     let actions: [WindowAction]
+    let geometry: OverlayGeometry
     let locale: Locale
     let hoverState: OverlayHoverState
 
     var body: some View {
-        HStack(spacing: OverlayGeometry.buttonSpacing) {
+        HStack(spacing: geometry.buttonSpacing) {
             ForEach(Array(actions.enumerated()), id: \.element) { index, action in
                 OverlayButtonView(
                     action: action,
+                    geometry: geometry,
                     isHovered: hoverState.hoveredIndex == index
                 )
             }
         }
-        .padding(OverlayGeometry.clusterPadding)
+        .padding(geometry.clusterPadding)
         .environment(\.locale, locale)
         .fixedSize()
     }
@@ -39,16 +41,17 @@ struct OverlayClusterView: View {
 
 private struct OverlayButtonView: View {
     let action: WindowAction
+    let geometry: OverlayGeometry
     let isHovered: Bool
 
     var body: some View {
         ZStack {
             Circle().fill(DS.Palette.overlayButtonFill)
             Image(systemName: action.symbolName)
-                .font(.system(size: OverlayGeometry.symbolSize, weight: .bold))
+                .font(.system(size: geometry.symbolSize, weight: .bold))
                 .foregroundStyle(DS.Palette.overlayButtonSymbol)
         }
-        .frame(width: OverlayGeometry.buttonSize, height: OverlayGeometry.buttonSize)
+        .frame(width: geometry.buttonSize, height: geometry.buttonSize)
         .overlay(Circle().strokeBorder(DS.Palette.overlayButtonBorder, lineWidth: DS.Overlay.buttonBorderWidth))
         .shadow(color: DS.Palette.overlayButtonShadow, radius: DS.Overlay.buttonShadowRadius, y: DS.Overlay.buttonShadowYOffset)
         .scaleEffect(isHovered ? DS.Overlay.hoverLift : 1.0)

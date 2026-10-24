@@ -229,7 +229,7 @@ final class AppState {
     private func applyEnabledState() {
         if isEnabled {
             let engine = engine ?? MissionControlEngine(
-                actionsProvider: { [weak self] in self?.overlaySettings.enabledActions ?? [] },
+                settingsProvider: { [weak self] in self?.overlaySettings ?? OverlaySettings() },
                 chordProvider: { [weak self] shortcut in self?.shortcuts.chord(for: shortcut) },
                 localeProvider: { [weak self] in self?.locale ?? .current }
             )

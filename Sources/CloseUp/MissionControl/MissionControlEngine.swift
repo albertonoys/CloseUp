@@ -10,9 +10,9 @@ import SwiftUI
 /// observers, timers, and an `NSWindow`.
 @MainActor
 final class MissionControlEngine {
-    /// Provides the enabled overlay actions (left-to-right) — read live so a
-    /// settings change takes effect on the next session.
-    private let actionsProvider: () -> [WindowAction]
+    /// Provides the overlay settings (enabled actions, size) — read
+    /// live so a settings change takes effect on the next show.
+    private let settingsProvider: () -> OverlaySettings
     /// Resolves the key chord for an in-MC shortcut (defaults, or a
     /// KeyboardShortcuts-backed provider once that lands).
     private let chordProvider: (MissionControlShortcut) -> KeyChord?
@@ -271,14 +271,14 @@ final class MissionControlEngine {
         enumerator: any WindowEnumerating = CGWindowListEnumerator(),
         performer: any WindowActionPerforming = AccessibilityWindowActionPerformer(),
         capabilityResolver: any WindowCapabilityResolving = AccessibilityCapabilityResolver(),
-        actionsProvider: @escaping () -> [WindowAction],
+        settingsProvider: @escaping () -> OverlaySettings,
         chordProvider: @escaping (MissionControlShortcut) -> KeyChord? = { $0.defaultChord },
         localeProvider: @escaping () -> Locale = { .current }
     ) {
         self.enumerator = enumerator
         self.performer = performer
         self.capabilityResolver = capabilityResolver
-        self.actionsProvider = actionsProvider
+        self.settingsProvider = settingsProvider
         self.chordProvider = chordProvider
         self.localeProvider = localeProvider
     }
@@ -833,9 +833,11 @@ final class MissionControlEngine {
         // window lights up when the cursor first reaches for the off-thumbnail half
         // of its controls — not only once it is already hovered (the
         // `overCurrentCluster` keep-case). Matches the zone the cluster occupies.
+        let settings = settingsProvider()
+        let overhang = OverlayGeometry.topOverhang * CGFloat(settings.buttonScale)
         let newHover = (overCurrentCluster && hovered != nil)
             ? hovered
-            : windows.frontmost(containing: location, topOverhang: OverlayGeometry.topOverhang)
+            : windows.frontmost(containing: location, topOverhang: overhang)
         if newHover?.windowID != hovered?.windowID {
             Log.missionControl.debug("hover \(self.hovered?.windowID ?? 0, privacy: .public)→\(newHover?.windowID ?? 0, privacy: .public) cgMouse=(\(Int(location.x), privacy: .public),\(Int(location.y), privacy: .public)) windows=\(self.windows.count, privacy: .public)")
             awaitFreshHoverAfterClick = false // a fresh hover — passive re-shows are live again
@@ -902,7 +904,8 @@ final class MissionControlEngine {
         // miss, resolve synchronously (bounded by the 1 s global AX messaging
         // cap); a blank outcome is healed by the bounded background retries,
         // whose merge re-shows this window the moment real buttons resolve.
-        let requested = actionsProvider()
+        let settings = settingsProvider()
+        let requested = settings.enabledActions
         let effective: WindowCapabilities?
         if let cached = capabilityCache[hovered.windowID] {
             effective = cached
@@ -918,7 +921,10 @@ final class MissionControlEngine {
             return
         }
         currentActions = actions
-        let geo = OverlayGeometry(windowFrame: hovered.frame, actionCount: actions.count, pivotHeight: pivotHeight)
+        let geo = OverlayGeometry(
+            windowFrame: hovered.frame, actionCount: actions.count,
+            pivotHeight: pivotHeight, scale: CGFloat(settings.buttonScale)
+        )
         geometry = geo
         presentOverlay(geo, actions: actions)
     }
@@ -941,7 +947,7 @@ final class MissionControlEngine {
         guard sessionActive, mcSurfacePresent else { return } // never create a window once MC is gone
         let retired = overlayWindow
         let window = makeOverlayWindow(at: geo.nsWindowFrame)
-        window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, locale: localeProvider(), hoverState: hoverState))
+        window.contentView = NSHostingView(rootView: OverlayClusterView(actions: actions, geometry: geo, locale: localeProvider(), hoverState: hoverState))
         window.orderFront(nil)
         overlayWindow = window
         if let retired { discard(retired, blank: false) }

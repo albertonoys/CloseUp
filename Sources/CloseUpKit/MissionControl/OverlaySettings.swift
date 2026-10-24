@@ -12,15 +12,22 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
     public var showClose: Bool
     public var showMinimize: Bool
     public var showZoom: Bool
+    /// Multiplier on the traffic-light size (1 = the native-matching default).
+    public var buttonScale: Double
+
+    /// The size steps offered in Settings.
+    public static let buttonScaleRange: ClosedRange<Double> = 0.75...2.5
 
     public init(
         showClose: Bool = true,
         showMinimize: Bool = true,
-        showZoom: Bool = true
+        showZoom: Bool = true,
+        buttonScale: Double = 1
     ) {
         self.showClose = showClose
         self.showMinimize = showMinimize
         self.showZoom = showZoom
+        self.buttonScale = buttonScale
     }
 
     public init(from decoder: any Decoder) throws {
@@ -29,6 +36,8 @@ public struct OverlaySettings: Codable, Equatable, Sendable {
         showClose = try c.decodeIfPresent(Bool.self, forKey: .showClose) ?? d.showClose
         showMinimize = try c.decodeIfPresent(Bool.self, forKey: .showMinimize) ?? d.showMinimize
         showZoom = try c.decodeIfPresent(Bool.self, forKey: .showZoom) ?? d.showZoom
+        let scale = try c.decodeIfPresent(Double.self, forKey: .buttonScale) ?? d.buttonScale
+        buttonScale = min(max(scale, Self.buttonScaleRange.lowerBound), Self.buttonScaleRange.upperBound)
     }
 
     /// Whether a given action's button is enabled. Hide/quit are keyboard-only
